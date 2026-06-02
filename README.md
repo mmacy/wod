@@ -44,6 +44,15 @@ back through 4 weeks forward, Monday-anchored), bundles the result into
 lives only in the deployed Pages artifact — nothing is committed to the
 repo, so `main` stays clean.
 
+Two safeguards keep deploys cheap and trustworthy:
+
+- **Skip-if-unchanged.** The scheduled run compares the fresh snapshot
+  to the currently-published one and aborts the deploy when nothing
+  meaningful has changed (timestamps aside).
+- **Don't publish bad data.** The fetcher exits non-zero if the current
+  week is empty or had upstream errors, so a transient SugarWOD outage
+  can't overwrite a good published snapshot with placeholders.
+
 That's it. No background polling, no per-visitor calls to upstream — every
 visitor reads the same daily JSON snapshot baked at build time.
 
@@ -84,6 +93,9 @@ from.
   contact the project if needed.
 - No scraping, no login — only the same public widget JSON that the
   gym's own website loads.
+- Safety caps to keep both sides honest: `/api/week` rejects dates
+  outside ±366 days, and each upstream response is capped at 1 MB so a
+  pathological reply can't run away with memory.
 
 ## Bootstrapping Pages on a fork
 
