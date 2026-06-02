@@ -33,6 +33,13 @@ SUGARWOD_API = "https://app.sugarwod.com/public/api/v1/affiliates/{aff}/workouts
 TRACKS = ["workout-of-the-day"]
 CACHE_TTL_SECONDS = 30 * 60
 REQUEST_TIMEOUT = 10
+# Hard cap on a single upstream response. Real SugarWOD payloads are well under
+# 20 KB per day; 1 MB is a generous safety net against a runaway response.
+MAX_UPSTREAM_BYTES = 1 * 1024 * 1024
+# How far from today we'll accept a `start` parameter on /api/week. Anything
+# outside this window is rejected with 400 rather than silently snapped to
+# today. Keeps the in-process cache from being ballooned by garbage dates.
+MAX_DATE_OFFSET_DAYS = 366
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -90,7 +97,14 @@ def _fetch_day(date_int: int) -> list[dict[str, Any]]:
         },
     )
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+        # Read one byte beyond the cap so we can detect overflow without
+        # pulling the whole response into memory.
+        raw = resp.read(MAX_UPSTREAM_BYTES + 1)
+    if len(raw) > MAX_UPSTREAM_BYTES:
+        raise RuntimeError(
+            f"upstream response exceeded {MAX_UPSTREAM_BYTES} bytes"
+        )
+    payload = json.loads(raw.decode("utf-8"))
 
     raw = payload.get("data") if isinstance(payload, dict) else None
     workouts = [_slim(w) for w in raw] if isinstance(raw, list) else []
@@ -199,7 +213,29 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/week":
             qs = urllib.parse.parse_qs(parsed.query)
-            anchor = _parse_date_int((qs.get("start") or [None])[0]) or date.today()
+            start_param = (qs.get("start") or [None])[0]
+            today = date.today()
+            if start_param is not None:
+                anchor = _parse_date_int(start_param)
+                if anchor is None:
+                    self._send_json(
+                        {"error": "invalid 'start' (expected YYYYMMDD)"},
+                        status=400,
+                    )
+                    return
+                if abs((anchor - today).days) > MAX_DATE_OFFSET_DAYS:
+                    self._send_json(
+                        {
+                            "error": (
+                                "'start' must be within "
+                                f"{MAX_DATE_OFFSET_DAYS} days of today"
+                            )
+                        },
+                        status=400,
+                    )
+                    return
+            else:
+                anchor = today
             start = _monday_of(anchor)
             try:
                 self._send_json(_week_payload(start))

@@ -49,6 +49,16 @@ def main() -> int:
         default=4,
         help="Number of weeks after the current week to include (default 4).",
     )
+    parser.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help=(
+            "Skip the post-fetch health check on the current week. "
+            "By default the script exits non-zero if the current week has "
+            "any upstream errors or zero workouts, so a transient SugarWOD "
+            "outage cannot overwrite a good published snapshot."
+        ),
+    )
     args = parser.parse_args()
 
     if args.before < 0 or args.after < 0:
@@ -108,6 +118,35 @@ def main() -> int:
         print(f"WARNING: {len(errors)} week(s) had errors:", file=sys.stderr)
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
+
+    # Health gate: refuse to declare success when the *current* week is empty
+    # or partially failed. Without this, a transient SugarWOD outage during
+    # the daily cron would overwrite a perfectly good published snapshot with
+    # placeholder data. Past/future weeks are not gated because they can
+    # legitimately be empty (gym hasn't programmed yet, etc.).
+    current_week_start = anchor.isoformat()
+    current_week = weeks.get(current_week_start, {})
+    current_errors = current_week.get("errors") or []
+    current_workouts = sum(
+        len(d.get("workouts", []))
+        for d in current_week.get("days", [])
+    )
+    if current_errors or current_workouts == 0:
+        msg = (
+            f"Current week ({current_week_start}) looks unhealthy: "
+            f"{current_workouts} workout(s), {len(current_errors)} error(s)."
+        )
+        if args.allow_degraded:
+            print(f"WARNING: {msg} Continuing because --allow-degraded.",
+                  file=sys.stderr)
+        else:
+            print(f"ERROR: {msg}", file=sys.stderr)
+            print(
+                "Refusing to publish a degraded snapshot. "
+                "Re-run with --allow-degraded to override.",
+                file=sys.stderr,
+            )
+            return 1
 
     return 0
 
