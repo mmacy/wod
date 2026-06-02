@@ -188,6 +188,110 @@ function applyView() {
   grid.classList.toggle("layout-rows", view === "rows");
 }
 
+// ---------- clipboard / sharing ----------
+
+const COPY_ICON =
+  '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">' +
+  '<path d="M9 4h7l4 4v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" ' +
+  'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+  '<path d="M5 8v12a2 2 0 0 0 2 2h8" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.8" stroke-linecap="round"/></svg>';
+
+const CHECK_ICON =
+  '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">' +
+  '<path d="M5 12l5 5L20 7" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback for non-secure contexts or older browsers.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+let _toastTimer = null;
+function showToast(message, kind = "info") {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    el.className = "toast";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.classList.toggle("error", kind === "error");
+  el.classList.add("show");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+function flashCopied(btn) {
+  const original = btn.innerHTML;
+  btn.innerHTML = CHECK_ICON;
+  btn.classList.add("copied");
+  setTimeout(() => {
+    btn.classList.remove("copied");
+    btn.innerHTML = original;
+  }, 1300);
+}
+
+function formatWorkoutForCopy(workout, day) {
+  const title = workout.title || workout.trackDisplay || "Workout";
+  const header = `${title} — ${day.weekdayFull}, ${day.monthDay}`;
+  const body = (workout.description || "").trim();
+  return `${header}\n\n${body}\n`;
+}
+
+function countWorkouts(payload) {
+  return payload.days.reduce((acc, d) => acc + d.workouts.length, 0);
+}
+
+function formatWeekForCopy(payload) {
+  const startD = new Date(payload.start + "T00:00:00");
+  const endD = new Date(payload.end + "T00:00:00");
+  const lines = [];
+  lines.push("# Emerald City Athletics — Shoreline / Ballinger Village");
+  lines.push(`## WOD for the week of ${formatRange(startD, endD)}`);
+
+  let printedAny = false;
+  for (const day of payload.days) {
+    if (!day.workouts.length) continue;
+    printedAny = true;
+    lines.push("");
+    lines.push(`### ${day.weekdayFull}, ${day.monthDay}`);
+    for (const w of day.workouts) {
+      lines.push("");
+      lines.push(`**${w.title || w.trackDisplay || "Workout"}**`);
+      lines.push((w.description || "").trim());
+    }
+  }
+
+  if (!printedAny) {
+    lines.push("");
+    lines.push("_(No workouts visible — adjust your filters and try again.)_");
+  }
+
+  return lines.join("\n").trim() + "\n";
+}
+
 function trackSortIndex(key) {
   const i = TRACK_ORDER.indexOf(key);
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
@@ -339,6 +443,39 @@ function renderFilters() {
   const viewGroup = makeGroup("View");
   viewGroup.appendChild(makeViewToggle());
   filtersEl.appendChild(viewGroup);
+
+  // copy group
+  const copyGroup = makeGroup("Copy");
+  const copyWeekBtn = document.createElement("button");
+  copyWeekBtn.type = "button";
+  copyWeekBtn.className = "action-btn";
+  copyWeekBtn.title =
+    "Copy the visible week as Markdown — paste it into Claude, Gemini, etc.";
+  copyWeekBtn.innerHTML = COPY_ICON;
+  const copyWeekLabel = document.createElement("span");
+  copyWeekLabel.textContent = "Copy week";
+  copyWeekBtn.appendChild(copyWeekLabel);
+  copyWeekBtn.addEventListener("click", async () => {
+    if (!lastPayload) return;
+    const visible = filteredPayload(lastPayload);
+    const text = formatWeekForCopy(visible);
+    const ok = await copyText(text);
+    if (ok) {
+      const n = countWorkouts(visible);
+      copyWeekBtn.classList.add("copied");
+      const previous = copyWeekLabel.textContent;
+      copyWeekLabel.textContent = "Copied!";
+      setTimeout(() => {
+        copyWeekBtn.classList.remove("copied");
+        copyWeekLabel.textContent = previous;
+      }, 1400);
+      showToast(`Copied week (${n} workout${n === 1 ? "" : "s"}) as Markdown`);
+    } else {
+      showToast("Couldn’t copy — clipboard access denied.", "error");
+    }
+  });
+  copyGroup.appendChild(copyWeekBtn);
+  filtersEl.appendChild(copyGroup);
 }
 
 // ---------- rendering ----------
@@ -396,8 +533,30 @@ function renderDayCard(day, todayISO) {
     const dot = document.createElement("span");
     dot.className = "track-dot";
     const titleText = document.createElement("span");
+    titleText.className = "title-text";
     titleText.textContent = w.title || w.trackDisplay || "Workout";
-    title.append(dot, titleText);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "copy-btn";
+    copyBtn.title = "Copy this workout";
+    copyBtn.setAttribute(
+      "aria-label",
+      `Copy ${w.title || "workout"} to clipboard`,
+    );
+    copyBtn.innerHTML = COPY_ICON;
+    copyBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ok = await copyText(formatWorkoutForCopy(w, day));
+      if (ok) {
+        flashCopied(copyBtn);
+        showToast(`Copied ${w.title || "workout"} (${day.weekday})`);
+      } else {
+        showToast("Couldn’t copy — select the text manually.", "error");
+      }
+    });
+
+    title.append(dot, titleText, copyBtn);
     item.appendChild(title);
 
     const body = document.createElement("pre");
