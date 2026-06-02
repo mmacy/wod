@@ -1,0 +1,19 @@
+version: 2
+
+updates:
+  # Keep SHA-pinned GitHub Actions current. Dependabot recognises the
+  # `uses: owner/action@<sha>  # vX.Y.Z` format and bumps both the SHA
+  # and the trailing version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Bundle all action updates into one PR. Easy to review for a
+      # small repo, low noise. Drop this if action updates ever grow
+      # noisy enough to warrant per-action PRs.
+      gha:
+        patterns:
+          - "*"
