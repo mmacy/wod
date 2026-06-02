@@ -63,14 +63,49 @@ jobs:
           print('weeks:', d.get('weekStarts'))
           "
 
+      - name: Compare snapshot vs published (skip deploy when unchanged)
+        id: compare
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PAGES_URL=$(gh api "repos/${GITHUB_REPOSITORY}/pages" --jq .html_url 2>/dev/null)
+          if [ -z "$PAGES_URL" ]; then
+            echo "Pages not configured yet — will deploy."
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SNAPSHOT_URL="${PAGES_URL%/}/data/wod.json?ts=$(date +%s)"
+          echo "Comparing against $SNAPSHOT_URL"
+          curl -fsSL --max-time 30 "$SNAPSHOT_URL" -o /tmp/published.json
+          curl_rc=$?
+          if [ $curl_rc -ne 0 ]; then
+            echo "Could not fetch published snapshot (curl rc=$curl_rc) — will deploy."
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 scripts/compare_snapshot.py site/data/wod.json /tmp/published.json
+          cmp_rc=$?
+          if [ $cmp_rc -eq 0 ]; then
+            echo "::notice::WOD content unchanged from published snapshot — skipping Pages deploy."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "WOD content differs (compare rc=$cmp_rc) — will deploy."
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure Pages
+        if: steps.compare.outputs.should_deploy != 'false'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: steps.compare.outputs.should_deploy != 'false'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.compare.outputs.should_deploy != 'false'
         uses: actions/deploy-pages@v4
