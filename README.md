@@ -8,6 +8,20 @@ Why: their schedule page uses a popup widget that's awkward to skim, especially
 on mobile. This shows the whole week at a glance, with each day's tracks
 (Fitness / Performance / HYROX) laid out side-by-side.
 
+## Features
+
+- **Whole-week view** of WODs at a glance for the current week.
+- **Grid or Rows layout** — toggle in the filter bar (preference persists).
+- **Track filters** (Fitness / Performance / HYROX / …): HYROX is **off by
+  default**; other discovered tracks default on. Combined titles like
+  "Fitness + Performance" stay visible when either tag is enabled, and
+  common gym-side typos (e.g. "Perforamance") canonicalise to the same
+  filter chip.
+- **Day filters** (Mon–Sun): turn off any days you don't care about.
+- **Keyboard navigation**: `←` / `→` previous/next week, `t` jump to today.
+- **In-process cache** of upstream day responses for 30 minutes, with up to
+  4 days fetched in parallel for fast page loads.
+
 ## Run it
 
 Requires Python 3.9+ (no third-party packages).

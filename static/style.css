@@ -101,14 +101,18 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------- filter strip ---------- */
 .filters {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center;
+  column-gap: 18px; row-gap: 10px;
   padding: 12px 24px;
   max-width: 1600px; margin: 0 auto;
   border-bottom: 1px solid var(--card-border);
 }
+.filter-group {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
 .filters-label {
   font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
-  color: var(--text-mute); margin-right: 6px; font-weight: 700;
+  color: var(--text-mute); font-weight: 700;
 }
 .filter-chip {
   position: relative;
@@ -147,20 +151,107 @@ button { font-family: inherit; cursor: pointer; }
 .filter-chip:has(input:focus-visible) {
   outline: 2px solid var(--brand); outline-offset: 2px;
 }
+.filter-chip.day-chip { padding: 6px 12px; }
+.filter-chip.day-chip .label { font-size: 12.5px; letter-spacing: 0.4px; }
 
-/* ---------- main grid ---------- */
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
+/* view toggle (segmented) */
+.view-toggle {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 3px;
+}
+.view-btn {
+  background: transparent; border: 0; color: var(--text-dim);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .12s ease, color .12s ease;
+}
+.view-btn:hover { color: var(--text); }
+.view-btn[aria-pressed="true"] {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+.view-btn:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+}
+
+/* ---------- main layout ---------- */
+.layout {
   padding: 22px 24px 32px;
   max-width: 1600px;
   margin: 0 auto;
 }
-@media (min-width: 640px)  { .grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 980px)  { .grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1280px) { .grid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1600px) { .grid { grid-template-columns: repeat(7, 1fr); } }
+
+/* grid view: 1-7 responsive columns */
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 640px)  { .layout-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 980px)  { .layout-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1280px) { .layout-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1600px) { .layout-grid { grid-template-columns: repeat(7, 1fr); } }
+
+/* rows view: stacked rows, header beside its workouts */
+.layout-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.layout-rows .day {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 22px;
+  min-height: 0;
+  padding: 16px 18px;
+}
+.layout-rows .day-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  padding-right: 18px;
+  border-bottom: none;
+  border-right: 1px dashed var(--card-border);
+}
+.layout-rows .day-head .day-name { display: block; }
+.layout-rows .day-head .day-date { display: block; font-size: 22px; line-height: 1.1; }
+.layout-rows .workouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.layout-rows .workout {
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+}
+.layout-rows .workout + .workout {
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+.layout-rows .workout.t-fitness { border-left-color: var(--track-fitness); }
+.layout-rows .workout.t-perf    { border-left-color: var(--track-perf); }
+.layout-rows .workout.t-hyrox   { border-left-color: var(--track-hyrox); }
+.layout-rows .workout.t-other   { border-left-color: var(--track-other); }
+.layout-rows .day .empty { grid-column: 2; }
+
+@media (max-width: 720px) {
+  .layout-rows .day { grid-template-columns: 1fr; gap: 12px; }
+  .layout-rows .day-head {
+    border-right: none;
+    border-bottom: 1px dashed var(--card-border);
+    padding-right: 0; padding-bottom: 10px;
+  }
+  .layout-rows .day .empty { grid-column: 1; }
+}
 
 /* ---------- day card ---------- */
 .day {
@@ -273,13 +364,18 @@ button { font-family: inherit; cursor: pointer; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes rise   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* ---------- error banner ---------- */
+/* ---------- error / info banner ---------- */
 .banner {
   grid-column: 1 / -1;
   padding: 12px 14px; border-radius: var(--radius-sm);
   background: rgba(255, 107, 107, 0.08); color: var(--danger);
   border: 1px solid rgba(255, 107, 107, 0.35);
   font-size: 13px;
+}
+.banner-info {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-dim);
+  border-color: var(--card-border);
 }
 
 /* ---------- small screens ---------- */

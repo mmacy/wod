@@ -1,7 +1,8 @@
 // WOD Viewer client.
 // - Fetches the week payload from our backend (/api/week?start=YYYYMMDD)
-// - Renders one card per day with one section per workout track
-// - Per-track filter chips, persisted in localStorage; HYROX off by default
+// - Renders one card per day; switchable Grid / Rows layout
+// - Track filter chips (HYROX off by default) and Day filter chips (all on)
+// - Layout + filter state persists in localStorage
 // - Keyboard nav: ← / → switch weeks, t = today
 
 const grid = document.getElementById("grid");
@@ -22,14 +23,26 @@ const DEFAULT_OFF_TRACKS = new Set(["hyrox"]);
 // Preferred display order for known tracks; unknowns appended alphabetically.
 const TRACK_ORDER = ["fitness", "performance", "hyrox"];
 
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_LABELS = {
+  mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu",
+  fri: "Fri", sat: "Sat", sun: "Sun",
+};
+
 const ENABLED_KEY = "wod.enabledTracks.v1";
 const KNOWN_KEY = "wod.knownTracks.v1";
+const ENABLED_DAYS_KEY = "wod.enabledDays.v1";
+const VIEW_KEY = "wod.view.v1";
 
 let currentStart = mondayOf(new Date());
 let lastPayload = null;
 const trackLabels = new Map(); // normalised key -> first-seen display label
 let knownTracks = loadSet(KNOWN_KEY) || new Set();
 let enabledTracks = loadSet(ENABLED_KEY) || new Set();
+let enabledDays = loadSet(ENABLED_DAYS_KEY) || new Set(DAY_KEYS);
+let view = (localStorage.getItem(VIEW_KEY) === "rows") ? "rows" : "grid";
+
+applyView(); // sync the main element class with persisted view
 
 // ---------- date helpers ----------
 
@@ -153,15 +166,26 @@ function workoutVisible(workout) {
   return tags.some((t) => enabledTracks.has(t));
 }
 
+function dayKey(weekday) {
+  return String(weekday || "").toLowerCase().slice(0, 3);
+}
+
 function filteredPayload(payload) {
   return {
     ...payload,
-    days: payload.days.map((d) => ({
-      ...d,
-      originalCount: d.workouts.length,
-      workouts: d.workouts.filter(workoutVisible),
-    })),
+    days: payload.days
+      .filter((d) => enabledDays.has(dayKey(d.weekday)))
+      .map((d) => ({
+        ...d,
+        originalCount: d.workouts.length,
+        workouts: d.workouts.filter(workoutVisible),
+      })),
   };
+}
+
+function applyView() {
+  grid.classList.toggle("layout-grid", view === "grid");
+  grid.classList.toggle("layout-rows", view === "rows");
 }
 
 function trackSortIndex(key) {
@@ -169,59 +193,152 @@ function trackSortIndex(key) {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 }
 
+// ---------- filter UI builders ----------
+
+function makeGroup(labelText) {
+  const group = document.createElement("div");
+  group.className = "filter-group";
+  if (labelText) {
+    const lbl = document.createElement("span");
+    lbl.className = "filters-label";
+    lbl.textContent = labelText;
+    group.appendChild(lbl);
+  }
+  return group;
+}
+
+function makeChip({ label, key, kind = "track", isOn, dotClass, onChange }) {
+  const chip = document.createElement("label");
+  const cls = ["filter-chip"];
+  if (kind === "day") cls.push("day-chip");
+  if (isOn) cls.push("on");
+  chip.className = cls.join(" ");
+  const id = `f-${kind}-${key.replace(/[^a-z0-9]/g, "-")}`;
+  chip.setAttribute("for", id);
+
+  if (dotClass) {
+    const dot = document.createElement("span");
+    dot.className = `dot ${dotClass}`;
+    chip.appendChild(dot);
+  }
+
+  const text = document.createElement("span");
+  text.className = "label";
+  text.textContent = label;
+  chip.appendChild(text);
+
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = id;
+  input.checked = isOn;
+  input.setAttribute("aria-label", `Toggle ${label}`);
+  input.addEventListener("change", (e) => {
+    onChange(e.target.checked);
+    chip.classList.toggle("on", e.target.checked);
+  });
+  chip.appendChild(input);
+
+  return chip;
+}
+
+function makeViewToggle() {
+  const toggle = document.createElement("div");
+  toggle.className = "view-toggle";
+  toggle.setAttribute("role", "group");
+  toggle.setAttribute("aria-label", "Layout");
+
+  const options = [
+    {
+      id: "grid",
+      label: "Grid",
+      icon:
+        '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' +
+        '<path fill="currentColor" d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>',
+    },
+    {
+      id: "rows",
+      label: "Rows",
+      icon:
+        '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' +
+        '<path fill="currentColor" d="M3 5h18v4H3zM3 11h18v4H3zM3 17h18v4H3z"/></svg>',
+    },
+  ];
+
+  for (const opt of options) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "view-btn";
+    btn.dataset.view = opt.id;
+    btn.setAttribute("aria-pressed", String(view === opt.id));
+    btn.title = `${opt.label} view`;
+    btn.innerHTML = opt.icon;
+    const span = document.createElement("span");
+    span.textContent = opt.label;
+    btn.appendChild(span);
+    btn.addEventListener("click", () => {
+      if (view === opt.id) return;
+      view = opt.id;
+      try { localStorage.setItem(VIEW_KEY, view); } catch {}
+      applyView();
+      for (const child of toggle.children) {
+        child.setAttribute("aria-pressed", String(child.dataset.view === view));
+      }
+    });
+    toggle.appendChild(btn);
+  }
+  return toggle;
+}
+
 function renderFilters() {
   filtersEl.innerHTML = "";
-  if (knownTracks.size === 0) {
-    filtersEl.hidden = true;
-    return;
-  }
   filtersEl.hidden = false;
 
-  const labelEl = document.createElement("span");
-  labelEl.className = "filters-label";
-  labelEl.textContent = "Show";
-  filtersEl.appendChild(labelEl);
-
-  const sorted = [...knownTracks].sort((a, b) => {
-    const ai = trackSortIndex(a);
-    const bi = trackSortIndex(b);
-    if (ai !== bi) return ai - bi;
-    return a.localeCompare(b);
-  });
-
-  for (const key of sorted) {
-    const label = trackLabels.get(key) || key;
-    const id = `filter-${key.replace(/[^a-z0-9]/g, "-")}`;
-    const isOn = enabledTracks.has(key);
-
-    const chip = document.createElement("label");
-    chip.className = "filter-chip" + (isOn ? " on" : "");
-    chip.setAttribute("for", id);
-
-    const dot = document.createElement("span");
-    dot.className = `dot ${trackCssClass(key)}`;
-
-    const text = document.createElement("span");
-    text.className = "label";
-    text.textContent = label;
-
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.id = id;
-    input.checked = isOn;
-    input.setAttribute("aria-label", `Show ${label} workouts`);
-
-    input.addEventListener("change", (e) => {
-      if (e.target.checked) enabledTracks.add(key);
-      else enabledTracks.delete(key);
-      saveSet(ENABLED_KEY, enabledTracks);
-      chip.classList.toggle("on", e.target.checked);
-      if (lastPayload) renderWeek(filteredPayload(lastPayload));
+  // tracks group
+  if (knownTracks.size > 0) {
+    const group = makeGroup("Tracks");
+    const sorted = [...knownTracks].sort((a, b) => {
+      const ai = trackSortIndex(a);
+      const bi = trackSortIndex(b);
+      if (ai !== bi) return ai - bi;
+      return a.localeCompare(b);
     });
-
-    chip.append(dot, text, input);
-    filtersEl.appendChild(chip);
+    for (const key of sorted) {
+      const label = trackLabels.get(key) || key;
+      group.appendChild(makeChip({
+        label, key, kind: "track",
+        isOn: enabledTracks.has(key),
+        dotClass: trackCssClass(key),
+        onChange: (checked) => {
+          if (checked) enabledTracks.add(key);
+          else enabledTracks.delete(key);
+          saveSet(ENABLED_KEY, enabledTracks);
+          if (lastPayload) renderWeek(filteredPayload(lastPayload));
+        },
+      }));
+    }
+    filtersEl.appendChild(group);
   }
+
+  // days group
+  const daysGroup = makeGroup("Days");
+  for (const k of DAY_KEYS) {
+    daysGroup.appendChild(makeChip({
+      label: DAY_LABELS[k], key: k, kind: "day",
+      isOn: enabledDays.has(k),
+      onChange: (checked) => {
+        if (checked) enabledDays.add(k);
+        else enabledDays.delete(k);
+        saveSet(ENABLED_DAYS_KEY, enabledDays);
+        if (lastPayload) renderWeek(filteredPayload(lastPayload));
+      },
+    }));
+  }
+  filtersEl.appendChild(daysGroup);
+
+  // view group
+  const viewGroup = makeGroup("View");
+  viewGroup.appendChild(makeViewToggle());
+  filtersEl.appendChild(viewGroup);
 }
 
 // ---------- rendering ----------
@@ -307,8 +424,16 @@ function renderWeek(payload) {
     grid.appendChild(banner);
   }
 
-  for (const day of payload.days) {
-    grid.appendChild(renderDayCard(day, payload.today));
+  if (payload.days.length === 0) {
+    const banner = document.createElement("div");
+    banner.className = "banner banner-info";
+    banner.textContent =
+      "No days selected — pick at least one day under \u201CDays\u201D above.";
+    grid.appendChild(banner);
+  } else {
+    for (const day of payload.days) {
+      grid.appendChild(renderDayCard(day, payload.today));
+    }
   }
 
   const start = new Date(payload.start + "T00:00:00");
