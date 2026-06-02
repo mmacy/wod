@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 .vscode/
 .idea/
+
+# Locally-generated Pages bundle (built by CI for deployment, not committed).
+site/

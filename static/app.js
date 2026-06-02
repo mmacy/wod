@@ -627,10 +627,74 @@ function showError(message) {
 
 // ---------- data ----------
 
+// Where the static snapshot lives, when one has been baked into the site.
+const SNAPSHOT_URL = "data/wod.json";
+const LIVE_API = "api/week";
+let _snapshotPromise = null;
+
+async function getSnapshot() {
+  if (_snapshotPromise) return _snapshotPromise;
+  _snapshotPromise = (async () => {
+    try {
+      const res = await fetch(SNAPSHOT_URL, { cache: "no-cache" });
+      if (!res.ok) return null;
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.toLowerCase().includes("application/json")) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  })();
+  return _snapshotPromise;
+}
+
+function localISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function parseLocalISO(s) {
+  const [y, m, day] = s.split("-").map(Number);
+  return new Date(y, m - 1, day);
+}
+
+function finalizeLoad(payload, opts = {}) {
+  // Always use the client's local date for the TODAY badge.
+  const finalPayload = { ...payload, today: localISODate(new Date()) };
+  lastPayload = finalPayload;
+  rememberTracks(discoverTracks(finalPayload));
+  renderFilters();
+  renderWeek(filteredPayload(finalPayload));
+  if (opts.snapshotInfo) {
+    metaEl.textContent = `Snapshot ${formatStamp(opts.snapshotInfo.generatedAt)}`;
+  }
+}
+
 async function loadWeek(startDate) {
   grid.setAttribute("aria-busy", "true");
+  const key = localISODate(startDate);
   try {
-    const res = await fetch(`/api/week?start=${ymd(startDate)}`, {
+    const snap = await getSnapshot();
+    if (snap && snap.weeks) {
+      const payload = snap.weeks[key];
+      if (payload) {
+        finalizeLoad(payload, { snapshotInfo: snap });
+        return;
+      }
+      const range = snap.weekStarts || [];
+      const endStr = localISODate(addDays(startDate, 6));
+      const coverage = range.length
+        ? `Snapshot covers ${range[0]} \u2192 ${range[range.length - 1]}.`
+        : "Try reloading later.";
+      showError(
+        `No snapshot for the week of ${key} \u2013 ${endStr}. ${coverage}`
+      );
+      return;
+    }
+
+    // No snapshot baked in — try the live local API (python3 app.py).
+    const res = await fetch(`${LIVE_API}?start=${ymd(startDate)}`, {
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
@@ -639,12 +703,9 @@ async function loadWeek(startDate) {
     }
     const payload = await res.json();
     if (payload.error) throw new Error(payload.error);
-    lastPayload = payload;
-    rememberTracks(discoverTracks(payload));
-    renderFilters();
-    renderWeek(filteredPayload(payload));
+    finalizeLoad(payload);
   } catch (err) {
-    showError(`Couldn’t load workouts: ${err.message}`);
+    showError(`Couldn\u2019t load workouts: ${err.message}`);
   }
 }
 

@@ -1,0 +1,76 @@
+name: Deploy WOD Viewer to Pages
+
+on:
+  # Refresh the snapshot once a day. 13:00 UTC = 06:00 PDT / 05:00 PST.
+  schedule:
+    - cron: "0 13 * * *"
+  # Rebuild on every push to main that touches the site or build pipeline.
+  push:
+    branches: [main]
+    paths:
+      - "templates/**"
+      - "static/**"
+      - "scripts/fetch_wod.py"
+      - "app.py"
+      - ".github/workflows/deploy-pages.yml"
+  # Manual button in the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow at most one Pages deploy in flight; queue newer ones.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p site/static site/data
+          cp templates/index.html site/index.html
+          cp -R static/. site/static/
+
+      - name: Fetch weekly WOD snapshot
+        run: python3 scripts/fetch_wod.py --out site/data/wod.json
+
+      - name: Show snapshot summary
+        run: |
+          echo "Snapshot size: $(wc -c < site/data/wod.json) bytes"
+          python3 -c "
+          import json
+          d = json.load(open('site/data/wod.json'))
+          print('schema:', d.get('schema'))
+          print('generatedAt:', d.get('generatedAt'))
+          print('weeks:', d.get('weekStarts'))
+          "
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

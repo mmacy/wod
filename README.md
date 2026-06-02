@@ -22,7 +22,9 @@ on mobile. This shows the whole week at a glance, with each day's tracks
 - **In-process cache** of upstream day responses for 30 minutes, with up to
   4 days fetched in parallel for fast page loads.
 
-## Run it
+## Two ways to run it
+
+### 1. Locally with live data (Python server)
 
 Requires Python 3.9+ (no third-party packages).
 
@@ -38,7 +40,50 @@ Options:
 | `--port`  | `8000`      | Port to listen on                    |
 | `--host`  | `127.0.0.1` | Host/interface; use `0.0.0.0` for LAN |
 
-Keyboard: `←` / `→` move between weeks, `t` jumps to the current week.
+The Python backend proxies the SugarWOD widget API and caches each day in
+memory for 30 minutes. Week navigation is unlimited — the server fetches
+whatever week you ask for on demand.
+
+### 2. As a static site on GitHub Pages
+
+A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) runs once
+a day and on every push to `main`:
+
+1. Assembles a `site/` directory from `templates/index.html`, `static/*`.
+2. Runs `scripts/fetch_wod.py` to write `site/data/wod.json` — a snapshot
+   covering 2 weeks before through 4 weeks after the current week
+   (7 weeks total).
+3. Uploads `site/` as a Pages artifact and deploys it.
+
+Nothing is committed to the repo by the action — the snapshot lives only
+in the deployed artifact, so `main` stays clean.
+
+The same `static/app.js` works in both modes: it first tries to fetch
+`data/wod.json`; if that returns 200 + JSON it uses the snapshot, otherwise
+it falls back to the live `api/week` endpoint served by `app.py`.
+
+To bootstrap Pages on a new fork:
+
+```bash
+gh api --method POST repos/{owner}/{repo}/pages -f build_type=workflow
+gh workflow run deploy-pages.yml
+```
+
+## Run snapshot script locally
+
+You can preview exactly what the static site will see:
+
+```bash
+python3 scripts/fetch_wod.py --out site/data/wod.json
+cp templates/index.html site/index.html
+cp -R static/. site/static/
+python3 -m http.server --directory site 8000
+# → http://127.0.0.1:8000
+```
+
+## Keyboard shortcuts
+
+`←` / `→` switch between weeks, `t` jumps back to the current week.
 
 ## How it works
 
@@ -57,8 +102,10 @@ Keyboard: `←` / `→` move between weeks, `t` jumps to the current week.
 ## Project layout
 
 ```
-app.py                 # stdlib HTTP server + SugarWOD proxy
-templates/index.html   # the shell page
-static/style.css       # dark, responsive theme
-static/app.js          # fetch + render
+app.py                       # local dev server + SugarWOD proxy
+scripts/fetch_wod.py         # builds the multi-week snapshot for Pages
+templates/index.html         # the shell page (shared by both modes)
+static/style.css             # dark, responsive theme
+static/app.js                # fetch + render; snapshot-first w/ API fallback
+.github/workflows/deploy-pages.yml  # daily Pages deploy
 ```
