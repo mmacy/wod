@@ -13,6 +13,8 @@ Emerald City Athletics — Shoreline / Ballinger Village.
 > scan side-by-side. If anyone at ECA or SugarWOD would prefer it taken
 > down, open an issue here and I'll do that.
 
+![WOD Viewer — Grid view showing Mon–Fri with track and day filters](assets/screenshot.png)
+
 ## Features
 
 - Whole-week view with each track laid out side-by-side.
