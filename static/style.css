@@ -185,16 +185,14 @@ button { font-family: inherit; cursor: pointer; }
   margin: 0 auto;
 }
 
-/* grid view: 1-7 responsive columns */
+/* grid view: responsive auto-fit columns.
+   With auto-fit, columns that have no card are collapsed so the remaining
+   visible cards expand to fill the row when days are hidden. */
 .layout-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
 }
-@media (min-width: 640px)  { .layout-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 980px)  { .layout-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1280px) { .layout-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1600px) { .layout-grid { grid-template-columns: repeat(7, 1fr); } }
 
 /* rows view: stacked rows, header beside its workouts */
 .layout-rows {
