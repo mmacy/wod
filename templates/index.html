@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WOD of the Week · Emerald City Athletics — Ballinger</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A cleaner, faster view of the weekly Workout of the Day for Emerald City Athletics (Shoreline / Ballinger).">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='30' fill='%233bb44a'/><text x='50%25' y='56%25' font-size='38' text-anchor='middle' fill='white' font-family='Helvetica,Arial,sans-serif' font-weight='800'>W</text></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="40" height="40">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#3bb44a"/><stop offset="1" stop-color="#1f6e2a"/>
+          </linearGradient></defs>
+          <circle cx="32" cy="32" r="30" fill="url(#g)"/>
+          <path d="M18 28h6l4 12 4-12h4l4 12 4-12h6l-8 22h-4l-4-11-4 11h-4z" fill="#fff"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>WOD of the Week</h1>
+        <p class="subtitle">Emerald City Athletics · Shoreline – Ballinger Village</p>
+      </div>
+    </div>
+
+    <nav class="weeknav" aria-label="Week navigation">
+      <button id="prev" class="iconbtn" aria-label="Previous week" title="Previous week">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="weekrange">
+        <strong id="weekRange">Loading…</strong>
+        <button id="today" class="ghostbtn" title="Jump to current week">Today</button>
+      </div>
+      <button id="next" class="iconbtn" aria-label="Next week" title="Next week">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <section id="filters" class="filters" aria-label="Workout filters" hidden></section>
+
+  <main id="grid" class="grid" aria-live="polite" aria-busy="true">
+    <div class="skeleton-row" aria-hidden="true">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Workouts via
+      <a href="https://emeraldcitygyms.com/shoreline-ballinger-village/group-class-schedule/" target="_blank" rel="noopener">Emerald City Athletics</a>.
+      Cached for 30 minutes.</span>
+    <span id="meta" class="meta"></span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
